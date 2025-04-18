@@ -1,17 +1,10 @@
 from itertools import combinations
 from collections import deque
 import subprocess
-import shutil
-import os
 
-def getVariaveis(dx, dy, variaveis):
-    var = 0
-    for key, value in variaveis.items():
-        if value == f'{dx}{dy}':
-            var = int(key)
-            return var
-    return var
-
+def getVariaveis(dx, dy, limite):
+    return dx * limite + dy + 1
+   
 def adjacentes(dx, dy, limite):
     adj = []
     direcoes = [(-1,  0), (1,  0), (0, -1), (0,  1),  # Esquerda, Direita, Baixo, Cima
@@ -25,6 +18,7 @@ def adjacentes(dx, dy, limite):
     return adj
 
 def clausula_U(combinacoes, caminho):
+    """"-A V -B V -C V -D V ..."""
     qtd_clausulas = 0
     for conj in combinacoes:
         clausula = ""
@@ -37,6 +31,7 @@ def clausula_U(combinacoes, caminho):
     return qtd_clausulas
 
 def clausula_L(combinacoes, caminho):
+    
     qtd_clausulas = 0
     for conj in combinacoes:
         clausula = ""
@@ -75,72 +70,95 @@ def pergunta(elemento, regras, qtd_variaveis, qtd_clausulas):
     resposta = subprocess.run(['clasp', pergunta],text=True)
     return resposta
 
-# Começo da execução do algoritmo --------------------------------------      
-tam = int (input())
-qtd_clausulas = 0
-regras = "/tmp/regras_JRGD"
 
+
+# Começo da execução do algoritmo --------------------------------------      
+
+regras = "/tmp/regras_JRGD"
 # Limpa o arquivo antes de começar a escrever novas regras
 open(regras, 'w').close()
-
-visitados = [ False for _ in range(tam * tam + 1)]
-variaveis = {}
-contador = 1
-for i in range(tam):
-    for j in range(tam):
-        variaveis[contador] = f'{i}{j}'
-        contador+= 1
-
+tam = int (input())
 qtd_bomba = int (input())
-qtd_pos_in = int (input())
-
 fila = deque()
+termina_campo = False
+visitados = [ False for _ in range(tam * tam + 1)]
 
-for i in range(qtd_pos_in):
-    dx,dy,k = map(int, input().split())
-    var = getVariaveis(dx, dy, variaveis)
-    visitados[var] = True
-    with open(regras, 'a') as file:
-        file.write(f"-{var} 0\n")
-        qtd_clausulas+= 1
-   
-    adj = adjacentes(dx,dy,tam)
-    # print(f"Posicao {dx, dy} adjacentes:")
-    # for j in adj:
-    #     print(f"{j} ")
-        
-    if k==0:
+while not termina_campo:
+    qtd_pos_in = int (input())
+    ja_esta_na_fila = set()
+
+    qtd_clausulas = 0
+    abrir_celulas = []
+
+    variaveis = {}
+    contador = 1
+    for i in range(tam):
+        for j in range(tam):
+            variaveis[contador] = (i,j)
+            contador+= 1
+
+    for i in range(qtd_pos_in):
+        dx,dy,k = map(int, input().split())
+        var = getVariaveis(dx, dy, tam)
+        visitados[var] = True
         with open(regras, 'a') as file:
+            file.write(f"-{var} 0\n")
+            qtd_clausulas+= 1
+    
+        adj = adjacentes(dx,dy,tam)
+        
+        
+        if k==0:
+            with open(regras, 'a') as file:
+                for elemento in adj:
+                    visitados[elemento] = True
+                    file.write(f"{-elemento} 0\n")
+                    qtd_clausulas+=1
+        else:
             for elemento in adj:
-                visitados[elemento] = True
-                file.write(f"{-elemento} 0\n")
-                qtd_clausulas+=1
+                if (not visitados[elemento]) and ( elemento not in ja_esta_na_fila):
+                    fila.append(elemento)
+                    ja_esta_na_fila.add(elemento)
+            n = len(adj)
+            qtd_clausulas += gera_clausulas(regras, k, n, adj)
+        
+    continua_jogando = 0
+    while fila:
+        elemento = fila.popleft()
+        tem_bomba = pergunta(elemento,regras,tam * tam, qtd_clausulas)
+        #print(f"Pergunta elemento : {elemento}")
+        nao_tem_bomba = pergunta(-elemento,regras,tam * tam, qtd_clausulas)
+
+        # Returncode == 20 é unsat
+        if tem_bomba.returncode == 20:
+            continua_jogando = 1
+            with open(regras, 'a') as file:
+                file.write(f'{elemento} 0\n')
+            visitados[elemento] = True
+            abrir_celulas.append([variaveis[elemento][0], 
+                variaveis[elemento][1],'B'])
+            if(qtd_bomba != -1):
+                qtd_bomba -= 1
+                if qtd_bomba == 0:
+                    termina_campo = True
+                    break
+            
+        
+        if nao_tem_bomba.returncode == 20:
+            continua_jogando = 1
+            with open(regras, 'a') as file:
+                file.write(f'{-elemento} 0\n')
+            visitados[elemento] = True
+            abrir_celulas.append([variaveis[elemento][0], 
+                variaveis[elemento][1],'A'])
+            
+    termina_campo = True if continua_jogando == 0 else False
+    if(termina_campo):
+        print(0)
     else:
-        for elemento in adj:
-            if (not visitados[elemento]) and (not elemento in fila) :
-                fila.append(elemento)
-        n = len(adj)
-        qtd_clausulas += gera_clausulas(regras, k, n, adj)
-    
-while fila:
-    elemento = fila.popleft()
-    print(f"Tal elemento tem bomba ? {elemento}")
-    resposta1 = pergunta(elemento,regras,tam * tam, qtd_clausulas)
-    print(f"resposta deu isso aqui {resposta1}")
-    print(f"Tal elemento nao tem bomba ? {elemento}")
-    resposta2 = pergunta(-elemento,regras,tam * tam, qtd_clausulas)
-    print(f"resposta deu isso aqui {resposta2}")
+        print(len(abrir_celulas))
+        for celula in abrir_celulas:
+            print(f"{celula[0]} {celula[1]} {celula[2]}")
+        abrir_celulas = []
 
-
-    # CompletedProcess(args=['clasp', '/tmp/regras_JRGD_pergunta'], returncode=20)
-    # if resposta1.returncode == 20:
-    #     with open(regras, 'a') as file:
-    #         file.write(f'{elemento} 0\n')
-    
-    # if resposta2.returncode == 20:
-    #     with open(regras, 'a') as file:
-    #         file.write(f'{-elemento} 0\n')
-    
 # Criar a condicao de parada
-# Criar a fila
-# Fazer as perguntas para tomar decisoes
