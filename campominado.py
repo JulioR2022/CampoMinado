@@ -80,40 +80,52 @@ open(regras, 'w').close()
 tam = int (input())
 qtd_bomba = int (input())
 fila = deque()
-termina_campo = False
 visitados = [ False for _ in range(tam * tam + 1)]
+continua_jogando = 1
+variaveis = {}
+contador = 1
+qtd_clausulas = 0
 
-while not termina_campo:
+# Constroi as váriaveis
+for i in range(tam):
+    for j in range(tam):
+        variaveis[contador] = (i,j)
+        contador+= 1
+
+while continua_jogando:
     qtd_pos_in = int (input())
     ja_esta_na_fila = set()
+    marca_celulas = [] # Posicoes que sabemos o conteudo
+    continua_jogando = 0
+    entrada = []
 
-    qtd_clausulas = 0
-    abrir_celulas = []
-
-    variaveis = {}
-    contador = 1
-    for i in range(tam):
-        for j in range(tam):
-            variaveis[contador] = (i,j)
-            contador+= 1
-
+    # Le todas as variaveis recebidas, salva na entrada e marca como visitadas
     for i in range(qtd_pos_in):
         dx,dy,k = map(int, input().split())
         var = getVariaveis(dx, dy, tam)
+        entrada.append([dx,dy,k,var])
         visitados[var] = True
         with open(regras, 'a') as file:
             file.write(f"-{var} 0\n")
             qtd_clausulas+= 1
-    
+
+    # Dado uma posicao geramos as clasulas referente as posicoes adjacentes
+    for posicao in entrada:
+        dx,dy,k = posicao[0],posicao[1],posicao[2]
         adj = adjacentes(dx,dy,tam)
-        
-        
+    
         if k==0:
             with open(regras, 'a') as file:
                 for elemento in adj:
+                    if(visitados[elemento]):
+                        continue
                     visitados[elemento] = True
                     file.write(f"{-elemento} 0\n")
                     qtd_clausulas+=1
+                    marca_celulas.append([variaveis[elemento][0], 
+                        variaveis[elemento][1],'A'])
+                    print("Marcou?")
+                continua_jogando = 1
         else:
             for elemento in adj:
                 if (not visitados[elemento]) and ( elemento not in ja_esta_na_fila):
@@ -122,12 +134,9 @@ while not termina_campo:
             n = len(adj)
             qtd_clausulas += gera_clausulas(regras, k, n, adj)
         
-    continua_jogando = 0
     while fila:
         elemento = fila.popleft()
         tem_bomba = pergunta(elemento,regras,tam * tam, qtd_clausulas)
-        #print(f"Pergunta elemento : {elemento}")
-        nao_tem_bomba = pergunta(-elemento,regras,tam * tam, qtd_clausulas)
 
         # Returncode == 20 é unsat
         if tem_bomba.returncode == 20:
@@ -135,30 +144,31 @@ while not termina_campo:
             with open(regras, 'a') as file:
                 file.write(f'{elemento} 0\n')
             visitados[elemento] = True
-            abrir_celulas.append([variaveis[elemento][0], 
+            marca_celulas.append([variaveis[elemento][0], 
                 variaveis[elemento][1],'B'])
-            if(qtd_bomba != -1):
-                qtd_bomba -= 1
-                if qtd_bomba == 0:
-                    termina_campo = True
-                    break
+            # if(qtd_bomba != -1):
+            #     qtd_bomba -= 1
+            #     if qtd_bomba == 0:
+            #         continua_jogando = 0
+            #         break
             
-        
+        nao_tem_bomba = pergunta(-elemento,regras,tam * tam, qtd_clausulas)
         if nao_tem_bomba.returncode == 20:
             continua_jogando = 1
             with open(regras, 'a') as file:
                 file.write(f'{-elemento} 0\n')
             visitados[elemento] = True
-            abrir_celulas.append([variaveis[elemento][0], 
+            marca_celulas.append([variaveis[elemento][0], 
                 variaveis[elemento][1],'A'])
             
-    termina_campo = True if continua_jogando == 0 else False
-    if(termina_campo):
+    # termina_campo = True if continua_jogando == 0 else False
+    if(not continua_jogando):
         print(0)
     else:
-        print(len(abrir_celulas))
-        for celula in abrir_celulas:
-            print(f"{celula[0]} {celula[1]} {celula[2]}")
-        abrir_celulas = []
+        print(len(marca_celulas))
+        for celula in marca_celulas:
+            print(f"{celula[0]} {celula[1]} {celula[2]}")        
+        
+        marca_celulas = []
 
 # Criar a condicao de parada
