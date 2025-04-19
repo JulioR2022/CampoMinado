@@ -124,7 +124,7 @@ while continua_jogando:
                     qtd_clausulas+=1
                     marca_celulas.append([variaveis[elemento][0], 
                         variaveis[elemento][1],'A'])
-                    print("Marcou?")
+                    
                 continua_jogando = 1
         else:
             for elemento in adj:
@@ -146,11 +146,10 @@ while continua_jogando:
             visitados[elemento] = True
             marca_celulas.append([variaveis[elemento][0], 
                 variaveis[elemento][1],'B'])
-            # if(qtd_bomba != -1):
-            #     qtd_bomba -= 1
-            #     if qtd_bomba == 0:
-            #         continua_jogando = 0
-            #         break
+            
+            qtd_bomba -= 1
+            if qtd_bomba == 0:    
+                break
             
         nao_tem_bomba = pergunta(-elemento,regras,tam * tam, qtd_clausulas)
         if nao_tem_bomba.returncode == 20:
@@ -164,11 +163,17 @@ while continua_jogando:
     # termina_campo = True if continua_jogando == 0 else False
     if(not continua_jogando):
         print(0)
-    else:
-        print(len(marca_celulas))
-        for celula in marca_celulas:
-            print(f"{celula[0]} {celula[1]} {celula[2]}")        
-        
-        marca_celulas = []
+        continue
+    
+    print(len(marca_celulas))
+    for celula in marca_celulas:
+        print(f"{celula[0]} {celula[1]} {celula[2]}")        
+    
+    if qtd_bomba == 0:
+        print(0)
+        continua_jogando = 0
+        continue
+
+    marca_celulas = []
 
 # Criar a condicao de parada
