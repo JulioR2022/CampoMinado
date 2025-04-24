@@ -126,14 +126,13 @@ while continua_jogando:
                 file.write(f"-{var} 0\n")
                 qtd_clausulas+= 1
     
-    if(qtd_visitados == qtd_variaveis):
-        print(0)
-        continua_jogando = 0
-        continue
+    # if(qtd_visitados == qtd_variaveis):
+    #     print(0)
+    #     continua_jogando = 0
+    #     continue
 
     # Dado uma posicao geramos as clasulas referente as posicoes adjacentes
     for posicao in entrada:
-        continua_jogando = 0
         dx,dy,k = posicao[0],posicao[1],posicao[2]
         adj = adjacentes(dx,dy,tam)
     
@@ -200,7 +199,6 @@ while continua_jogando:
                 print(f"{variaveis[elemento][0]} {variaveis[elemento][1]} A")
                 visitados[elemento] = True
                 qtd_visitados += 1
-        continua_jogando = 0
     
         
     marca_celulas = []
