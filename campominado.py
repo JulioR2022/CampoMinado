@@ -105,6 +105,11 @@ for i in range(tam):
 # Laço principal
 while continua_jogando:
     qtd_pos_in = int (input())
+    if qtd_pos_in == 0:
+        continua_jogando = 0
+        print(0)
+        continue
+
     ja_esta_na_fila = set()
     marca_celulas = [] # Posicoes que sabemos o conteudo
     entrada = []
@@ -120,9 +125,15 @@ while continua_jogando:
             with open(regras, 'a') as file:
                 file.write(f"-{var} 0\n")
                 qtd_clausulas+= 1
+    
+    if(qtd_visitados == qtd_variaveis):
+        print(0)
+        continua_jogando = 0
+        continue
 
     # Dado uma posicao geramos as clasulas referente as posicoes adjacentes
     for posicao in entrada:
+        continua_jogando = 0
         dx,dy,k = posicao[0],posicao[1],posicao[2]
         adj = adjacentes(dx,dy,tam)
     
@@ -149,7 +160,6 @@ while continua_jogando:
     while fila:
         elemento = fila.popleft()
         tem_bomba = pergunta(elemento,regras,qtd_variaveis, qtd_clausulas)
-
         # Returncode == 20 é unsat
         if tem_bomba.returncode == 20:
             with open(regras, 'a') as file:
@@ -188,14 +198,11 @@ while continua_jogando:
         for elemento in adj:
             if not visitados[elemento]:
                 print(f"{variaveis[elemento][0]} {variaveis[elemento][1]} A")
+                visitados[elemento] = True
+                qtd_visitados += 1
         continua_jogando = 0
-        print(0)
     
-    if(qtd_visitados == qtd_variaveis):
-        print(0)
-        continua_jogando = 0
         
-
     marca_celulas = []
 
 
