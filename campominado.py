@@ -1,6 +1,19 @@
 from itertools import combinations
 from collections import deque
 import subprocess
+import threading
+import time
+import sys
+
+# # Para controlar o tempo de execução
+# def enforce_timeout():
+#     time.sleep(10.0)
+#     print(0)
+#     sys.exit(0)
+
+# timeout_thread = threading.Thread(target=enforce_timeout)
+# timeout_thread.daemon = True
+# timeout_thread.start()
 
 def getVariaveis(dx, dy, limite):
     """" Dado uma posição x e y retorna a variável associada à aquela posição"""
@@ -73,7 +86,7 @@ def pergunta(elemento, regras, qtd_variaveis, qtd_clausulas):
             destino.write(linha)
         destino.write(f'{-elemento} 0\n')
 
-    resposta = subprocess.run(['clasp', pergunta],text=True)
+    resposta = subprocess.run(['clasp', pergunta],text=True, stdout=subprocess.DEVNULL, stderr = subprocess.DEVNULL)
     return resposta
 
 # Começo da execução do algoritmo --------------------------------------      
@@ -135,7 +148,7 @@ while continua_jogando:
     for posicao in entrada:
         dx,dy,k = posicao[0],posicao[1],posicao[2]
         adj = adjacentes(dx,dy,tam)
-    
+        duvidas = []
         if k==0:
             for elemento in adj:
                 if(visitados[elemento]):
@@ -158,29 +171,30 @@ while continua_jogando:
     # Faz as perguntas para tomar as decisões
     while fila:
         elemento = fila.popleft()
-        tem_bomba = pergunta(elemento,regras,qtd_variaveis, qtd_clausulas)
-        # Returncode == 20 é unsat
-        if tem_bomba.returncode == 20:
-            with open(regras, 'a') as file:
-                file.write(f'{elemento} 0\n')
-            visitados[elemento] = True
-            qtd_visitados += 1
-            marca_celulas.append([variaveis[elemento][0], 
-                variaveis[elemento][1],'B'])
-            
-            qtd_bomba -= 1
-            if qtd_bomba == 0:    
-                break
-            
+
         nao_tem_bomba = pergunta(-elemento,regras,qtd_variaveis, qtd_clausulas)
+        # Returncode == 20 é unsat
         if nao_tem_bomba.returncode == 20:
-            with open(regras, 'a') as file:
-                file.write(f'{-elemento} 0\n')
-            visitados[elemento] = True
-            qtd_visitados += 1
-            marca_celulas.append([variaveis[elemento][0], 
-                variaveis[elemento][1],'A'])
-    
+                with open(regras, 'a') as file:
+                    file.write(f'{-elemento} 0\n')
+                visitados[elemento] = True
+                qtd_visitados += 1
+                marca_celulas.append([variaveis[elemento][0], 
+                    variaveis[elemento][1],'A'])
+        else:
+            tem_bomba = pergunta(elemento,regras,qtd_variaveis, qtd_clausulas)
+            if tem_bomba.returncode == 20:
+                with open(regras, 'a') as file:
+                    file.write(f'{elemento} 0\n')
+                visitados[elemento] = True
+                qtd_visitados += 1
+                marca_celulas.append([variaveis[elemento][0], 
+                    variaveis[elemento][1],'B'])
+                
+                # qtd_bomba -= 1
+                # if qtd_bomba == 0:    
+                #     break
+        
     tam_marca_celulas = len(marca_celulas)
 
     if(tam_marca_celulas == 0):
@@ -193,14 +207,12 @@ while continua_jogando:
         print(f"{celula[0]} {celula[1]} {celula[2]}")
         
     
-    if qtd_bomba == 0:
-        for elemento in adj:
-            if not visitados[elemento]:
-                print(f"{variaveis[elemento][0]} {variaveis[elemento][1]} A")
-                visitados[elemento] = True
-                qtd_visitados += 1
+    # if qtd_bomba == 0:
+    #     for elemento in adj:
+    #         if not visitados[elemento]:
+    #             print(f"{variaveis[elemento][0]} {variaveis[elemento][1]} A")
+    #             visitados[elemento] = True
+    #             qtd_visitados += 1
     
         
     marca_celulas = []
-
-
