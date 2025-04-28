@@ -3,6 +3,7 @@ from collections import deque
 import subprocess
 import sys
 import signal
+from concurrent.futures import ThreadPoolExecutor
 
 class TimeoutError(Exception):
     pass
@@ -32,7 +33,7 @@ def adjacentes(dx, dy, limite):
     
     return adj
 
-def clausula_U(combinacoes, caminho):
+def clausula_U(combinacoes):
     """"(-A V -B V -C V -D V ...)"""
     qtd_clausulas = 0
     clausula = ""
@@ -41,8 +42,8 @@ def clausula_U(combinacoes, caminho):
             clausula += f"{-elemento} "
         clausula += "0\n"
         qtd_clausulas += 1
-    with open(caminho, 'a') as file:
-        file.write(clausula)
+    # with open(caminho, 'a') as file:
+    #     file.write(clausula)
     return qtd_clausulas
 
 def clausula_L(combinacoes, caminho):
@@ -75,7 +76,7 @@ def gera_clausulas(caminho, k, n, adj):
 def pergunta(elemento, regras, qtd_variaveis, qtd_clausulas):
     """"Adiciona o elemento de forma negada no arquivo e roda o clasp"""
 
-    pergunta = f"{regras}_pergunta"  
+    pergunta = f"{regras}_pergunta_{abs(elemento)}"
     with open(pergunta, 'w') as file:
         file.write(f'p cnf {qtd_variaveis} {qtd_clausulas + 1}\n')
     
@@ -87,26 +88,56 @@ def pergunta(elemento, regras, qtd_variaveis, qtd_clausulas):
     resposta = subprocess.run(['clasp','--quiet', pergunta],text=True, stdout=subprocess.PIPE, stderr = subprocess.DEVNULL)
     return resposta
 
+def handle_pergunta(elemento, regras, visitados, marca_celulas, variaveis, contadores, qtd_clausulas_antigas):
+    escrever_arquivo= ""
+    nao_tem_bomba = pergunta(-elemento, regras, contadores["qtd_visitados"], qtd_clausulas_antigas)
+   
+    # Returncode == 20 é unsat
+    if nao_tem_bomba.returncode == 20:
+            escrever_arquivo += f'{-elemento} 0\n'
+            visitados[elemento] = True
+            contadores["qtd_visitados"] += 1
+            contadores['qtd_clausulas'] += 1 
+            marca_celulas.append([variaveis[elemento][0], 
+                variaveis[elemento][1],'A'])
+            return escrever_arquivo
+
+    tem_bomba = pergunta(elemento, regras, contadores["qtd_visitados"], qtd_clausulas_antigas)
+    if tem_bomba.returncode == 20:
+        escrever_arquivo += f'{elemento} 0\n'
+        visitados[elemento] = True
+        contadores["qtd_visitados"] += 1
+        contadores['qtd_clausulas'] += 1 
+        marca_celulas.append([variaveis[elemento][0], 
+            variaveis[elemento][1],'B'])
+        contadores["qtd_bomba"] -= 1
+        return escrever_arquivo
+    
+    return escrever_arquivo
+
 # Começo da execução do algoritmo --------------------------------------      
 def main():
     regras = "/tmp/regras_JRGD"
     escrever_arquivo = ""
     # Limpa o arquivo antes de começar a escrever novas regras
-    open(regras, 'w').close()
+    #open(regras, 'w').close()
 
     # Leitura da entrada padrão
     tam = int (input())
     qtd_bomba = int (input())
 
-    qtd_variaveis = tam * tam
+    contadores = {
+        "qtd_clausulas" : 0,
+        "qtd_visitados" : 0,
+        "qtd_bomba" : qtd_bomba,
+        "qtd_variaveis" : tam*tam
+    }
     fila = deque()
-    visitados = [ False for _ in range(qtd_variaveis + 1)]
+    visitados = [ False for _ in range(contadores["qtd_variaveis"] + 1)]
     continua_jogando = 1
     variaveis = {}
-    contador = 1
-    qtd_clausulas = 0
-    qtd_visitados = 0
 
+    contador = 1
     # Constroi as váriaveis
     for i in range(tam):
         for j in range(tam):
@@ -115,7 +146,7 @@ def main():
 
     # Laço principal
     while continua_jogando:
-        if(qtd_bomba == 0):
+        if(contadores["qtd_bomba"] == 0):
             raise TimeoutError
 
         qtd_pos_in = int (input())
@@ -133,28 +164,26 @@ def main():
             entrada.append([dx,dy,k,var])
             if(not visitados[var]):
                 visitados[var] = True
-                qtd_visitados += 1
+                contadores["qtd_visitados"] += 1
+                contadores["qtd_clausulas"] += 1
                 escrever_arquivo += f"-{var} 0\n"
-                qtd_clausulas += 1
 
-
-        with open(regras, 'a') as file:
-            file.write(escrever_arquivo)
-            escrever_arquivo = ""
+        # with open(regras, 'a') as file:
+        #     file.write(escrever_arquivo)
+        #     escrever_arquivo = ""
 
         # Dado uma posicao geramos as clasulas referente as posicoes adjacentes
         for posicao in entrada:
             dx,dy,k = posicao[0],posicao[1],posicao[2]
             adj = adjacentes(dx,dy,tam)
-            duvidas = []
             if k==0:
                 for elemento in adj:
                     if(visitados[elemento]):
                         continue
                     visitados[elemento] = True
-                    qtd_visitados += 1
+                    contadores["qtd_visitados"] += 1
+                    contadores["qtd_clausulas"] += 1
                     escrever_arquivo += f'-{elemento} 0\n'
-                    qtd_clausulas += 1
                     marca_celulas.append([variaveis[elemento][0], 
                         variaveis[elemento][1],'A'])
             else:
@@ -163,53 +192,69 @@ def main():
                         fila.append(elemento)
                         ja_esta_na_fila.add(elemento)
                 n = len(adj)
-                qtd_clausulas += gera_clausulas(regras, k, n, adj)
+                contadores["qtd_clausulas"] += gera_clausulas(regras, k, n, adj)
         
-        with open(regras, 'a') as file:
-            file.write(escrever_arquivo)
-            escrever_arquivo = ""
-        # Faz as perguntas para tomar as decisões
-        qtd_clausulas_temp = 0
-        while fila:    
-            elemento = fila.popleft()
+        # with open(regras, 'a') as file:
+        #     file.write(escrever_arquivo)
+        #     escrever_arquivo = ""
 
-            nao_tem_bomba = pergunta(-elemento,regras,qtd_variaveis, qtd_clausulas)
-            # Returncode == 20 é unsat
-            if nao_tem_bomba.returncode == 20:
-                    escrever_arquivo += f'{-elemento} 0\n'
-                    visitados[elemento] = True
-                    qtd_visitados += 1
-                    qtd_clausulas_temp += 1
-                    marca_celulas.append([variaveis[elemento][0], 
-                        variaveis[elemento][1],'A'])
-            else:
-                tem_bomba = pergunta(elemento,regras,qtd_variaveis, qtd_clausulas)
-                if tem_bomba.returncode == 20:
-                    escrever_arquivo += f'{elemento} 0\n'
-                    qtd_clausulas_temp += 1
-                    visitados[elemento] = True
-                    qtd_visitados += 1
-                    marca_celulas.append([variaveis[elemento][0], 
-                        variaveis[elemento][1],'B'])
-                    
-                    qtd_bomba -= 1
+        tasks = []
+        qtd_clausulas_antigas = contadores["qtd_clausulas"]
+        with ThreadPoolExecutor() as executor:
+            # Faz as perguntas para tomar as decisões
+            qtd_clausulas_temp = 0
+            while fila:    
+                elemento = fila.popleft()
+                tasks.append(
+                    executor.submit(
+                        handle_pergunta,
+                        regras, 
+                        visitados, 
+                        marca_celulas, 
+                        variaveis, 
+                        contadores, 
+                        qtd_clausulas_antigas
+                    )
+                )
+    
 
-        tam_marca_celulas = len(marca_celulas)
+                # nao_tem_bomba = pergunta(-elemento,regras,qtd_variaveis, qtd_clausulas)
+                # # Returncode == 20 é unsat
+                # if nao_tem_bomba.returncode == 20:
+                #         escrever_arquivo += f'{-elemento} 0\n'
+                #         visitados[elemento] = True
+                #         qtd_visitados += 1
+                #         qtd_clausulas_temp += 1
+                #         marca_celulas.append([variaveis[elemento][0], 
+                #             variaveis[elemento][1],'A'])
+                # else:
+                #     tem_bomba = pergunta(elemento,regras,qtd_variaveis, qtd_clausulas)
+                #     if tem_bomba.returncode == 20:
+                #         escrever_arquivo += f'{elemento} 0\n'
+                #         qtd_clausulas_temp += 1
+                #         visitados[elemento] = True
+                #         qtd_visitados += 1
+                #         marca_celulas.append([variaveis[elemento][0], 
+                #             variaveis[elemento][1],'B'])
+                        
+                #         qtd_bomba -= 1
 
-        if(tam_marca_celulas == 0):
-            raise TimeoutError
             
-        print(tam_marca_celulas)
-        for celula in marca_celulas:
-            print(f"{celula[0]} {celula[1]} {celula[2]}")
+            tam_marca_celulas = len(marca_celulas)
+
+            if(tam_marca_celulas == 0):
+                raise TimeoutError
+                
+            print(tam_marca_celulas)
+            for celula in marca_celulas:
+                print(f"{celula[0]} {celula[1]} {celula[2]}")
             
-        
-        with open(regras, 'a') as file:
-            file.write(escrever_arquivo)
-            qtd_clausulas += qtd_clausulas_temp
-            escrever_arquivo = ""
-            
-        marca_celulas = []
+            # with open(regras, 'a') as file:
+            #     file.write(escrever_arquivo)
+            #     qtd_clausulas += qtd_clausulas_temp
+            #     escrever_arquivo = ""
+                
+            marca_celulas = []
 
 try:
     main()
